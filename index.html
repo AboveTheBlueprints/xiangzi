@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>橡子</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{background:#ece8dc;font-family:"PingFang SC","Hiragino Sans GB",sans-serif;margin:0;display:flex;flex-direction:column;align-items:center}
+canvas{margin-top:12px;max-width:100%}
+#keys{display:flex;gap:4px;margin:8px 0;flex-wrap:wrap;justify-content:center}
+button{font-size:16px;padding:6px 10px;border:1px solid #8a7a60;background:#f6f2e6;border-radius:4px;cursor:pointer}
+#next{background:#e6dcc0}
+#again{margin-top:6px;display:none}
+</style></head><body>
+<canvas id="c" width="684" height="520"></canvas>
+<div id="keys"></div>
+<button id="again">再来一局</button>
+<script>
+// 橡子 v11（吹万 第 31 天 06:2x）：照 ~/碰/橡子/林.py 搬过来，规则一条不改。
+const W=14, LET='abcdefghijklmn', NEED=3, YEARS=12;
+function lightAt(trees,x){let L=1;for(const t of trees){if(t.h>=6){const d=Math.abs(t.x-x);if(d<=1)L=Math.min(L,0.2);else if(d==2)L=Math.min(L,0.6);}}return L;}
+function treeAt(st,x){return st.trees.find(t=>t.x==x);}
+function fresh(){const cache=Array(W).fill(0);cache[7]=2;
+ const st={year:1,season:'秋',trees:[{x:4,h:10,age:80,die:10,old:true,wait:0},{x:10,h:10,age:90,die:4,old:true,wait:0}],
+ cache,mouth:0,fed:0,hungry:0,over:'',tracks:Array(W).fill(0),holes:new Set(),logs:[]};drop(st);return st;}
+function drop(st){let n=0;for(const t of st.trees)if(t.h>=6)n+=t.old?4:2;st.mouth=n;}
+function endAutumn(st){st.mouth=0;st.season='冬';st.fed=0;st.tracks=Array(W).fill(0);st.holes=new Set();
+ for(let x=0;x<W;x++)if(st.cache[x]&&lightAt(st.trees,x)>=1){st.cache[x]-=1;st.tracks[x]=1;}}
+function dig(st,x){if(st.fed>=NEED)return;if(st.cache[x]>0){st.cache[x]--;st.fed++;}else st.holes.add(x);}
+function endWinter(st){
+ if(st.fed<NEED){st.hungry++;if(st.hungry>=2){st.over=`第 ${st.year} 年冬天，你没熬过去。`;return;}}else st.hungry=0;
+ for(let x=0;x<W;x++){if(st.cache[x]>0){if(!treeAt(st,x))st.trees.push({x,h:1,age:0,die:999,born:st.year,old:false,wait:0,half:0});st.cache[x]=0;}}
+ st.year++;
+ const alive=[];for(const t of st.trees){t.age++;if(t.old&&st.year>=t.die){st.logs.push([t.x,st.year]);continue;}alive.push(t);}
+ st.trees=alive;const keep=[];
+ for(const t of alive){if(!t.old&&t.h<6){const L=lightAt(alive.filter(o=>o!==t),t.x);
+   if(L>=0.6){t.wait=0;t.half=(t.half||0)+1;if(L>=1||t.half%2==0)t.h++;}
+   else{t.wait++;if(t.wait>12)continue;}}keep.push(t);}
+ st.trees=keep;
+ if(st.year>YEARS){st.over=`你活过了 ${YEARS} 个冬天。`;return;}
+ st.season='秋';drop(st);}
+function press(ch){if(st.over)return;
+ if(ch=='N'){if(st.season=='秋')endAutumn(st);else endWinter(st);}
+ else{const x=LET.indexOf(ch);if(x<0)return;
+  if(st.season=='秋'){if(st.mouth>0){st.cache[x]++;st.mouth--;}}else dig(st,x);}
+ draw();}
+const cv=document.getElementById('c'),g=cv.getContext('2d');
+const rgb=(a)=>`rgb(${a[0]|0},${a[1]|0},${a[2]|0})`;
+function rect(x0,y0,x1,y1,c){g.fillStyle=rgb(c);g.fillRect(x0,y0,x1-x0+1,y1-y0+1);}
+function ell(x0,y0,x1,y1,c){g.fillStyle=rgb(c);g.beginPath();g.ellipse((x0+x1)/2,(y0+y1)/2,(x1-x0)/2,(y1-y0)/2,0,0,Math.PI*2);g.fill();}
+function line(pts,c,w){g.strokeStyle=rgb(c);g.lineWidth=w;g.beginPath();g.moveTo(pts[0],pts[1]);g.lineTo(pts[2],pts[3]);g.stroke();}
+function text(x,y,s,c,n){g.fillStyle=rgb(c);g.font=`${n}px "PingFang SC","Hiragino Sans GB",sans-serif`;g.textBaseline='top';g.fillText(s,x,y);}
+function draw(){
+ const S=46,ox=20,gy=360,snow=st.season=='冬';
+ rect(0,0,cv.width,cv.height,[236,232,220]);
+ text(ox,10,`第 ${Math.min(st.year,YEARS)} 年　${st.season}`,[40,40,40],20);
+ if(st.season=='秋')text(ox+200,12,`嘴里还有 ${st.mouth} 颗橡子`,[110,70,30],17);
+ else text(ox+200,12,`这一冬吃了 ${st.fed} / ${NEED}`,[110,70,30],17);
+ if(st.hungry)text(ox+420,12,'（饿瘦了）',[160,40,40],17);
+ for(let x=0;x<W;x++){const L=lightAt(st.trees,x);rect(ox+x*S,60,ox+x*S+S-1,gy,[236-(1-L)*90,232-(1-L)*90,220-(1-L)*80]);}
+ if(st.season=='秋'&&!st.over){for(let x=0;x<W;x++)if(lightAt(st.trees,x)>=1){const cx=ox+x*S+S/2|0,by=90+(x*37%5)*14,c=[60,70,110];
+  line([cx-9,by,cx-3,by+5],c,3);line([cx-3,by+5,cx+1,by-1],c,3);line([cx+1,by-1,cx+5,by+5],c,3);line([cx+5,by+5,cx+11,by],c,3);}}
+ for(const t of st.trees){const cx=ox+t.x*S+S/2|0,top=gy-t.h*26,dying=t.old&&st.year>=t.die-1;
+  const bw=t.h>=6?4:0;rect(cx-4-bw,top,cx+4+bw,gy,[90,62,40]);
+  if(t.h>=6){const crown=dying?[120,120,110]:(snow?[200,200,205]:[70,120,60]);ell(cx-S*1.4,top-50,cx+S*1.4,top+60,crown);
+   if(dying)for(let k=0;k<5;k++)line([cx-30+k*15,top-40,cx-36+k*15,top+50],[236,232,220],4);}
+  else{const waiting=t.wait>0;const col=snow?[150,160,140]:(waiting?[170,150,80]:[110,150,80]);
+   if(waiting)ell(cx-8,top-6,cx+8,top+6,col);else ell(cx-10,top-14,cx+10,top+6,col);}}
+ if(!st.over)text(ox,40,'你是一只松鼠。秋天把橡子埋进土里，冬天刨出来吃，一冬得吃上三颗。',[90,90,90],14);
+ else{for(const t of st.trees)if(!t.old){const cx=ox+t.x*S+S/2|0;text(cx-16,gy-t.h*26-(t.h>=6?70:34),`${t.born}年`,[150,40,40],13);}
+  text(ox,40,'红字：这棵是你第几年秋天埋下、没刨回去的那颗。',[150,40,40],14);}
+ rect(ox,gy,ox+S*W,gy+60,snow?[250,250,252]:[120,95,60]);
+ for(let x=0;x<W;x++){const cx=ox+x*S+S/2|0;
+  for(let k=0;k<st.cache[x];k++)ell(cx-14+k*10,gy+22,cx-7+k*10,gy+30,snow?[150,100,40]:[235,200,130]);
+  if(st.tracks[x]&&snow)for(let k=0;k<3;k++){const bx=cx-14+k*10,by=gy+6+(k%2)*4,c=[90,90,90];line([bx,by,bx+3,by+6],c,1);line([bx+6,by,bx+3,by+6],c,1);line([bx+3,by-2,bx+3,by+6],c,1);}
+  text(cx-5,gy+38,LET[x],snow?[120,120,120]:[60,60,60],15);}
+ for(const [lx,ly] of st.logs)if(st.year-ly<=4){const cx=ox+lx*S+S/2|0;g.fillStyle=rgb(snow?[150,140,135]:[110,80,55]);g.beginPath();g.roundRect(cx-S,gy-14,2*S,12,5);g.fill();}
+ for(const x of st.holes){const cx=ox+x*S+S/2|0;g.strokeStyle=rgb([80,60,40]);g.lineWidth=2;g.beginPath();g.ellipse(cx,gy+23,9,7,0,0,Math.PI*2);g.stroke();}
+ if(st.over)text(ox,gy+70,st.over,[40,40,40],15);
+ document.getElementById('next').textContent=st.season=='秋'?'过冬 (空格)':'开春 (空格)';
+ document.getElementById('again').style.display=st.over?'inline-block':'none';
+}
+const kd=document.getElementById('keys');
+for(const ch of LET){const b=document.createElement('button');b.textContent=ch;b.onclick=()=>press(ch);kd.appendChild(b);}
+const nb=document.createElement('button');nb.id='next';nb.onclick=()=>press('N');kd.appendChild(nb);
+document.getElementById('again').onclick=()=>{st=fresh();draw();};
+document.addEventListener('keydown',e=>{if(e.key==' '||e.key=='Enter'){e.preventDefault();press('N');}else if(LET.includes(e.key))press(e.key);});
+let st=fresh();draw();
+</script></body></html>
